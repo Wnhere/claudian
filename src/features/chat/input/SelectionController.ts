@@ -1,4 +1,4 @@
-import type { App, WorkspaceLeaf } from 'obsidian';
+import type { App, TextFileView, WorkspaceLeaf } from 'obsidian';
 import { MarkdownView } from 'obsidian';
 
 import type { EditorSelectionContext } from '@/core/prompt/editorContext';
@@ -90,6 +90,11 @@ export class SelectionController {
   poll(): void {
     const view = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!view) {
+      const activeView = this.app.workspace.getMostRecentLeaf?.()?.view;
+      if (activeView?.getViewType() === 'code-view') {
+        this.#pollCodeView(activeView as TextFileView);
+        return;
+      }
       // Keep the captured selection only while focus is transitioning into
       // the chat UI; any other leaf switch should drop stale prompt context.
       this.#clearWhenMarkdownContextIsUnavailable();
@@ -144,6 +149,57 @@ export class SelectionController {
     } else {
       this.#handleDeselection();
     }
+  }
+
+  /** Read Code View's Prism DOM without including its separate line-number gutter. */
+  #pollCodeView(view: TextFileView): void {
+    const code = view.containerEl.querySelector<HTMLElement>('.code-view-container pre code');
+    const notePath = view.file?.path;
+    const selection = this.#getDocumentSelection(code?.ownerDocument);
+    if (!code || !notePath || !selection || selection.isCollapsed || selection.rangeCount !== 1) {
+      this.#handleDeselection();
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    if (!code.contains(range.startContainer) || !code.contains(range.endContainer)) {
+      this.#handleDeselection();
+      return;
+    }
+
+    // DOM offsets disambiguate repeated code and support backwards selections.
+    // Fail closed if the rendered text no longer matches the loaded source.
+    const source = view.getViewData();
+    if (code.textContent !== source) {
+      this.#handleDeselection();
+      return;
+    }
+    const prefix = code.ownerDocument.createRange();
+    prefix.selectNodeContents(code);
+    prefix.setEnd(range.startContainer, range.startOffset);
+    const from = prefix.toString().length;
+    const selectedText = range.toString();
+    if (!selectedText.trim() || source.slice(from, from + selectedText.length) !== selectedText) {
+      this.#handleDeselection();
+      return;
+    }
+    const startLine = source.slice(0, from).split(/\r?\n/).length;
+    // A selection ending just after a newline does not touch the following line.
+    const lineCount = selectedText.replace(/\r?\n$/, '').split(/\r?\n/).length;
+    const domRanges = [range.cloneRange()];
+    this.inputHandoffGraceUntil = null;
+    const previous = this.storedSelection;
+    if (previous?.editorView === undefined
+      && previous?.notePath === notePath
+      && previous.selectedText === selectedText
+      && previous.startLine === startLine
+      && previous.lineCount === lineCount
+      && this.#rangeListsMatch(previous.domRanges, domRanges)) return;
+
+    this.#clearHighlight();
+    this.storedSelection = { notePath, selectedText, lineCount, startLine, domRanges };
+    this.updateIndicator();
+    this.onUserSelectionChanged?.();
   }
 
   #pollReadingMode(view: MarkdownView): void {

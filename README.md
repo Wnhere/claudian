@@ -23,6 +23,8 @@ Open Claudian interface from the ribbon icon or command palette. Everything work
 
 **Inline Edit** — Select text or start at the cursor position + hotkey to edit directly in notes with word-level diff preview.
 
+**Code View context** — Select source code in the [Code View plugin](https://github.com/CasualBot/obsidian-codeviewer-plugin) to attach the selected text, file path, and line range to your next chat message. This provides context, not inline editing. See [selection setup](#code-view-selections) if the text cannot be selected.
+
 **Zen Mode** — Collapse the sidebar holding Claudian and the chat moves to a [compact composer](assets/zen-mode-collapsed.png) at the bottom of your notes, with a one-line activity preview and [the conversation one click away](assets/zen-mode-expanded.png).
 
 **Slash Commands & Skills** — Type `/` or `$` for reusable prompt templates or Skills from user- and vault-level scopes.
@@ -96,6 +98,32 @@ npm run build
 - **No telemetry or unsolicited background activity**: Claudian does not run telemetry beacons. UI polling timers read local Obsidian/editor selection state only. Network activity is limited to explicit provider runtime work, configured MCP endpoints, provider SDK/CLI calls needed to answer your requests, and their configured services.
 
 ## Troubleshooting
+
+### Code View selections
+
+Select text inside Code View's code area (not the line-number gutter), then focus
+Claudian's input. The `N lines selected` chip confirms that the selection is attached.
+Clear the chip to remove it. Other third-party code editors are not covered by this adapter.
+
+Code View 1.0.3 may inherit Obsidian's non-selectable UI styling. If mouse selection
+is unavailable, enable this CSS snippet in Obsidian's **Appearance → CSS snippets**:
+
+```css
+.workspace-leaf-content[data-type="code-view"],
+.workspace-leaf-content[data-type="code-view"] .view-content,
+.workspace-leaf-content[data-type="code-view"] .code-view-container,
+.workspace-leaf-content[data-type="code-view"] .code-view-wrap,
+.workspace-leaf-content[data-type="code-view"] pre,
+.workspace-leaf-content[data-type="code-view"] pre code,
+.workspace-leaf-content[data-type="code-view"] pre code * {
+  -webkit-user-select: text !important;
+  user-select: text !important;
+}
+.workspace-leaf-content[data-type="code-view"] .code-view-gutter {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+```
 
 The following sections use Claude Code as an example.
 
